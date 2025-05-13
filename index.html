@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visualizador de Cartera Gastos Medicos</title>
+  <!-- Papaparse para parsear CSV de Google Sheets -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+
+  <style>
+    /* =======================
+       RESETEO BÁSICO
+       ======================= */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Roboto', sans-serif; background-color: #f8f9fa; color: #333; line-height: 1.4; }
+
+    /* =======================
+       ENCABEZADO Y TÍTULO
+       ======================= */
+    .logo-container { text-align: center; margin-top: 30px; }
+    .logo-container img { max-width: 120px; }
+    h1 { text-align: center; color: #37393d; margin-top: 10px; font-size: 2rem; font-weight: 700; letter-spacing: 0.5px; }
+
+    /* =======================
+       DESCRIPCIÓN
+       ======================= */
+    .info-text { max-width: 800px; margin: 15px auto 25px auto; text-align: center; color: #555; font-size: 1rem; line-height: 1.5; }
+
+    /* =======================
+       LOGIN: CONTRASEÑA
+       ======================= */
+    .input-container { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; }
+    .input-container label { margin-bottom: 5px; color: #414347; font-weight: 500; font-size: 0.95rem; }
+    .input-container input { padding: 12px; border: 1px solid #ccc; border-radius: 6px; width: 280px; max-width: 90%; margin-bottom: 10px; font-size: 1rem; transition: border 0.2s ease; }
+    .input-container input:focus { outline: none; border-color: #3B82F6; }
+    .input-container button { padding: 12px 20px; border: none; border-radius: 6px; background: #323539; color: #fff; font-size: 1rem; cursor: pointer; transition: background 0.3s ease, transform 0.3s ease; }
+    .input-container button:hover { background: #6531bf; transform: scale(1.03); }
+    .error-message { text-align: center; color: #ff0000; margin-top: 10px; display: none; }
+
+    /* =======================
+       DASHBOARD CONTAINER
+       ======================= */
+    .dashboard-container { max-width: 95%; margin: 0 auto 30px auto; display: none; }
+    .welcome-message { text-align: center; font-size: 1.1rem; margin-bottom: 20px; color: #6531bf; font-weight: 600; }
+
+    /* =======================
+       STATS / RESUMEN
+       ======================= */
+    .stats-container { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 20px; }
+    .stats-container h2 { margin-bottom: 10px; color: #222324; font-size: 1.2rem; letter-spacing: 0.5px; }
+    .stats-overview { display: flex; flex-wrap: wrap; gap: 20px; }
+    .stats-item { background: linear-gradient(to right, #ffffff, #f9f9fd); border-radius: 10px; border: 1px solid #6531bf; padding: 15px; flex: 1 1 180px; text-align: center; transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .stats-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .stats-item h3 { margin-bottom: 8px; font-size: 1rem; color: #6531bf; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stats-item p { font-size: 1.1rem; color: #333; font-weight: 600; margin-top: 5px; }
+
+    /* =======================
+       FILTROS
+       ======================= */
+    .filters-container { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end; }
+    .filter-group { display: flex; flex-direction: column; gap: 5px; }
+    .filter-group label { color: #232424; font-weight: 500; font-size: 0.9rem; }
+    .filter-group select, .filter-group input { padding: 8px; border-radius: 6px; border: 1px solid #ccc; min-width: 150px; font-size: 0.9rem; transition: border 0.2s ease; }
+    .filter-group select:focus, .filter-group input:focus { outline: none; border-color: #202122; }
+    .apply-filters-btn { padding: 10px 16px; border: none; border-radius: 6px; background: #151617; color: #fff; cursor: pointer; transition: background 0.3s ease, transform 0.3s ease; height: 42px; margin-top: 20px; font-size: 1rem; }
+    .apply-filters-btn:hover { background: #6635b4; transform: scale(1.03); }
+
+    /* =======================
+       TABLA DE DATOS
+       ======================= */
+    .table-container { max-width: 95%; margin: 0 auto 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-x: auto; display: none; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background-color: #262628; color: #fff; }
+    th, td { font-size: 0.85rem; text-align: center; padding: 12px; vertical-align: middle; }
+    th { font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    tr:not(:last-child) { border-bottom: 1px solid #eaeaea; }
+    tbody tr:hover { background-color: #f5f6fa; }
+
+    /* =======================
+       RESPONSIVE
+       ======================= */
+    @media (max-width: 768px) {
+      h1 { font-size: 1.6rem; }
+      .info-text { font-size: 0.95rem; margin: 10px auto 20px auto; }
+      .stats-overview { flex-direction: column; }
+      .stats-item { margin: 0 auto; max-width: 300px; }
+      .filters-container { flex-direction: column; align-items: stretch; }
+      .filter-group { width: 100%; }
+      .apply-filters-btn { width: 100%; }
+      th, td { font-size: 0.8rem; padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- LOGO y TÍTULO -->
+  <div class="logo-container">
+    <img src="LOGO.png" alt="Logo Empresa" />
+  </div>
+  <h1>Visualizador de Cartera</h1>
+  <div class="info-text">
+    La información presentada corresponde a datos consolidados al cierre del mes anterior.
+  </div>
+
+  <!-- LOGIN -->
+  <div class="input-container">
+    <label for="userPass">Introducir Contraseña:</label>
+    <input type="password" id="userPass" placeholder="Ingrese el ID del usuario" />
+    <button id="ingresarBtn">Ingresar</button>
+    <div class="error-message" id="errorMsg">
+      No se encontraron registros para esa contraseña.
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="dashboard-container" id="dashboardContainer">
+    <div class="welcome-message" id="welcomeMessage"></div>
+
+    <!-- RESUMEN POR PRODUCTO -->
+    <div class="stats-container">
+      <h2>Resumen por Producto</h2>
+      <div class="stats-overview" id="statsOverview"></div>
+    </div>
+
+    <!-- FILTROS (sin Estatus) -->
+    <div class="filters-container">
+      <div class="filter-group" id="formaPagoGroup">
+        <label for="filterFormaCobro">Filtrar por Forma de Pago:</label>
+        <select id="filterFormaCobro"><option value="Todos">Todos</option></select>
+      </div>
+      <div class="filter-group">
+        <label for="filterConductoCobro">Filtrar por Conducto de Cobro:</label>
+        <select id="filterConductoCobro"><option value="Todos">Todos</option></select>
+      </div>
+      <div class="filter-group">
+        <label for="filterProducto">Filtrar por Producto:</label>
+        <select id="filterProducto"><option value="Todos">Todos</option></select>
+      </div>
+      <div class="filter-group">
+        <label for="filterPoliza">Buscar Póliza (exacto):</label>
+        <input type="text" id="filterPoliza" placeholder="Ej. 123456" />
+      </div>
+      <button class="apply-filters-btn" id="applyFiltersBtn">Aplicar Filtros</button>
+      <button class="apply-filters-btn" id="downloadBtn" style="margin-left:10px;">
+        Descargar Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- TABLA -->
+  <div class="table-container" id="tableContainer">
+    <table id="dataTable"></table>
+  </div>
+
+  <script>
+    const sheetURL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSDvxdBVG8W1-avIos95_mgl4HUYzQYWStnXLa8EsfQ3ToZQb7mx1OXAkGVp34U49WWgwlAMq2pNCiU/pub?gid=0&single=true&output=csv";
+
+    const columnsToDisplay = [
+      "POLIZA",
+      "CLIENTE",
+      "RFC",
+      "INICIO DE VIGENCIA",
+      "ULTIMO PAGO REALIZADO",
+      "PRODUCTO",
+      "FORMA DE PAGO",
+      "CONDUCTO DE COBRO",
+      "PRIMA",
+      "MONEDA"
+    ];
+
+    const columnHeaders = {
+      "POLIZA": "PÓLIZA",
+      "CLIENTE": "CLIENTE",
+      "RFC": "RFC",
+      "INICIO DE VIGENCIA": "INICIO DE VIGENCIA",
+      "ULTIMO PAGO REALIZADO": "ÚLTIMO PAGO REALIZADO",
+      "PRODUCTO": "PRODUCTO",
+      "FORMA DE PAGO": "FORMA DE PAGO",
+      "CONDUCTO DE COBRO": "CONDUCTO DE COBRO",
+      "PRIMA": "PRIMA",
+      "MONEDA": "MONEDA"
+    };
+
+    const ingresarBtn         = document.getElementById("ingresarBtn");
+    const userPass            = document.getElementById("userPass");
+    const errorMsg            = document.getElementById("errorMsg");
+    const dashboardContainer  = document.getElementById("dashboardContainer");
+    const welcomeMessage      = document.getElementById("welcomeMessage");
+    const statsOverview       = document.getElementById("statsOverview");
+    const tableContainer      = document.getElementById("tableContainer");
+    const dataTable           = document.getElementById("dataTable");
+    const applyFiltersBtn     = document.getElementById("applyFiltersBtn");
+    const downloadBtn         = document.getElementById("downloadBtn");
+    const filterFormaCobro    = document.getElementById("filterFormaCobro");
+    const formaPagoGroup      = document.getElementById("formaPagoGroup");
+    const filterConductoCobro = document.getElementById("filterConductoCobro");
+    const filterProducto      = document.getElementById("filterProducto");
+    const filterPoliza        = document.getElementById("filterPoliza");
+
+    let userData = [];
+    let filteredData = [];
+
+    function excelSerialToDateStr(serial) {
+      if (!serial || isNaN(serial)) return serial;
+      const epoch = new Date(Date.UTC(1899, 11, 30));
+      const date  = new Date(epoch.getTime() + serial * 86400*1000);
+      const d = String(date.getUTCDate()).padStart(2,"0");
+      const m = String(date.getUTCMonth()+1).padStart(2,"0");
+      const y = date.getUTCFullYear();
+      return `${d}/${m}/${y}`;
+    }
+
+    ingresarBtn.addEventListener("click", () => {
+      const enteredPass = userPass.value.trim();
+      if (!enteredPass) {
+        errorMsg.style.display="block"; errorMsg.textContent="Por favor, ingresa una contraseña.";
+        dashboardContainer.style.display="none";
+        tableContainer.style.display="none";
+        return;
+      }
+
+      Papa.parse(sheetURL, {
+        download: true,
+        header: true,
+        transformHeader: h => h
+          .replace(/^\uFEFF/,"")
+          .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+          .trim(),
+        complete: res => {
+          const data = res.data;
+          const passKey = Object.keys(data[0]).find(k =>
+            k.toUpperCase().includes("CONTRASEN")
+          );
+          userData = data.filter(r =>
+            (r[passKey]||"").toString().trim() === enteredPass
+          );
+
+          if (!userData.length) {
+            errorMsg.style.display="block"; errorMsg.textContent="No se encontraron registros para esa contraseña.";
+            dashboardContainer.style.display="none";
+            tableContainer.style.display="none";
+            return;
+          }
+
+          errorMsg.style.display="none";
+          const agente = userData[0]["NOM_AGENTE"] || userData[0]["AGENTE"] || "Agente";
+          welcomeMessage.textContent = `BIENVENID@ ${agente}`;
+
+          const hasFP = "FORMA DE PAGO" in userData[0];
+          formaPagoGroup.style.display = hasFP ? "flex" : "none";
+
+          fillSelectOptions(userData, "FORMA DE PAGO",    filterFormaCobro);
+          fillSelectOptions(userData, "CONDUCTO DE COBRO",filterConductoCobro);
+          fillSelectOptions(userData, "PRODUCTO",         filterProducto);
+
+          filteredData = [...userData];
+          updateDashboard();
+        },
+        error: err => {
+          console.error(err);
+          errorMsg.style.display="block"; errorMsg.textContent="Error al cargar datos.";
+        }
+      });
+    });
+
+    applyFiltersBtn.addEventListener("click", () => {
+      filteredData = [...userData];
+      if ("FORMA DE PAGO" in userData[0] && filterFormaCobro.value!=="Todos")
+        filteredData = filteredData.filter(r=>r["FORMA DE PAGO"]===filterFormaCobro.value);
+      if (filterConductoCobro.value!=="Todos")
+        filteredData = filteredData.filter(r=>r["CONDUCTO DE COBRO"]===filterConductoCobro.value);
+      if (filterProducto.value!=="Todos")
+        filteredData = filteredData.filter(r=>r["PRODUCTO"]===filterProducto.value);
+      const q = filterPoliza.value.trim();
+      if (q) filteredData = filteredData.filter(r=>String(r["POLIZA"])===q);
+      updateDashboard();
+    });
+
+    downloadBtn.addEventListener("click", () => {
+      let csv = columnsToDisplay.map(c=>columnHeaders[c]||c).join(",")+"\n";
+      filteredData.forEach(r=>{
+        csv+=columnsToDisplay.map(c=>String(r[c]||"").replace(/,/g," ")).join(",")+"\n";
+      });
+      const blob = new Blob([csv],{type:"text/csv;charset=utf-8;"}),
+            url  = URL.createObjectURL(blob),
+            a    = document.createElement("a");
+      a.href=url; a.download="cartera.csv"; document.body.appendChild(a);
+      a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    });
+
+    function fillSelectOptions(arr,col,sel){
+      if (!(col in arr[0])) return;
+      const vals = [...new Set(arr.map(r=>r[col]).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="Todos">Todos</option>';
+      vals.forEach(v=>{
+        const o = document.createElement("option");
+        o.value = v; o.textContent = v; sel.appendChild(o);
+      });
+    }
+
+    function updateDashboard(){
+      dashboardContainer.style.display="block";
+      tableContainer.style.display="block";
+      updateTable(filteredData);
+      updateStats(filteredData);
+    }
+
+    function updateTable(rows){
+      let html = "<thead><tr>";
+      columnsToDisplay.forEach(c => html += `<th>${columnHeaders[c]||c}</th>`);
+      html += "</tr></thead><tbody>";
+      rows.forEach(r=>{
+        html += "<tr>";
+        columnsToDisplay.forEach(c=>{
+          let v = r[c]||"";
+          if (c==="INICIO DE VIGENCIA"||c==="ULTIMO PAGO REALIZADO") v = excelSerialToDateStr(v);
+          html += `<td>${v}</td>`;
+        });
+        html += "</tr>";
+      });
+      html += "</tbody>";
+      dataTable.innerHTML = html;
+    }
+
+    function updateStats(rows){
+      statsOverview.innerHTML = "";
+      const counts = {};
+      rows.forEach(r=>{
+        const p = r["PRODUCTO"]||"Sin producto";
+        counts[p] = (counts[p]||0) + 1;
+      });
+      Object.entries(counts).forEach(([prod, cnt])=>{
+        const card = document.createElement("div");
+        card.className = "stats-item";
+        card.innerHTML = `<h3>${prod}</h3><p>${cnt}</p>`;
+        statsOverview.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>
+
